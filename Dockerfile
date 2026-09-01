@@ -10,6 +10,9 @@ FROM python:3.12-slim AS app
 ENV PYTHONUNBUFFERED=1 PYTHONUTF8=1 \
     NA_DATA_DIR=/data NA_REPORTS_DIR=/reports
 WORKDIR /app
+# libgomp1 = OpenMP runtime required by lightgbm; git for any pip VCS installs
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 git \
+    && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir uv
 COPY pyproject.toml README.md ./
 COPY src/ ./src/

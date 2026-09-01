@@ -10,12 +10,15 @@ services:
       NA_DATA_DIR: /data
       NA_REPORTS_DIR: /reports
 
+  # Optional: JupyterLab on the notebooks. Token auth is disabled - only expose 8888
+  # on a trusted network / behind a firewall, or drop the token flags and use the
+  # printed URL.
   jupyter:
     build: .
     command: >
       sh -c "uv pip install --system jupyterlab &&
              jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
-             --NotebookApp.token='' --NotebookApp.password=''"
+             --ServerApp.root_dir=/app --ServerApp.token='' --ServerApp.password=''"
     ports:
       - "8888:8888"
     volumes:

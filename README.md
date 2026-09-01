@@ -23,6 +23,8 @@ Feeds modelled: **Ookla SpeedTest**, **N3 probe EDRs**, **YouTube/Audio QoE**, *
 
 ## Quick start
 
+Deploying on a VM? See **[`INSTALL_VM.md`](INSTALL_VM.md)** (Docker or native, step by step).
+
 ```bash
 uv venv --python 3.12
 uv pip install -e ".[dev]"
