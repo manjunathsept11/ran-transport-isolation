@@ -2,207 +2,243 @@
 
 Repo: **https://github.com/manjunathsept11/ran-transport-isolation**
 
-Two ways to run it:
+- **[Windows VM — native](#windows-vm--native)** (recommended for a Windows Server / Win10/11 VM)
+- **[Windows VM — Docker Desktop](#windows-vm--docker-desktop)**
+- **[Linux VM](#linux-vm)** (Docker or native)
 
-- **[Option A — Docker](#option-a--docker-simplest)** (one command, no toolchain to install)
-- **[Option B — native](#option-b--native-python--node)** (uv + Node, better for development)
-
-**VM sizing:** 2 vCPU / 4 GB RAM / 10 GB disk is comfortable. Generation of the default
+**VM sizing:** 2 vCPU / 4 GB RAM / 10 GB disk is comfortable. Generating the default
 `mixed_realistic` (300 sites × 14 days) peaks around ~2 GB RAM and takes ~5 min; analytics
-another ~7 min. Use fewer sites/days for a smaller box (see [scaling](#scaling)).
-
-Assumes **Ubuntu 22.04 / 24.04** (Debian is the same). Adjust `apt` for other distros.
+another ~7 min. Use fewer sites/days on a smaller box — see [scaling](#scaling).
 
 ---
 
-## 0. Clone
+## Windows VM — native
 
-```bash
-sudo apt update && sudo apt install -y git
+Tested on Windows 11 / Windows Server 2022. Run the commands in **PowerShell**.
+
+> **You connect over Remote Desktop (RDP)** → just open **`http://localhost:8000`** in the
+> VM's own browser (Edge). You can skip the `--host 0.0.0.0` and firewall steps (6) — those
+> are only for reaching the dashboard from a *different* machine.
+
+### 1. Install prerequisites
+
+```powershell
+# Git, Node 20 LTS, and uv (Python manager). winget ships with Windows 10 21H2+ / Server 2022.
+winget install --id Git.Git -e --source winget
+winget install --id OpenJS.NodeJS.LTS -e --source winget
+winget install --id astral-sh.uv -e --source winget
+```
+
+If `winget` is unavailable, install manually:
+- Git: <https://git-scm.com/download/win>
+- Node 20 LTS: <https://nodejs.org/en/download>
+- uv: `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`
+
+**Close and reopen PowerShell** so the new `PATH` takes effect, then check:
+
+```powershell
+git --version ; node --version ; uv --version
+```
+
+### 2. Enable long paths + UTF-8 (one time, important)
+
+```powershell
+# node_modules / .venv nest deep - Windows' 260-char path limit will otherwise break installs
+git config --global core.longpaths true
+New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
+  -Name LongPathsEnabled -Value 1 -PropertyType DWORD -Force | Out-Null
+
+# the CLI progress bar uses Unicode; the legacy console codepage crashes on it
+[Environment]::SetEnvironmentVariable("PYTHONUTF8", "1", "Machine")
+```
+
+Reopen PowerShell once more so `PYTHONUTF8` is set.
+
+### 3. Clone & install
+
+```powershell
+cd $HOME
 git clone https://github.com/manjunathsept11/ran-transport-isolation.git
 cd ran-transport-isolation
+
+uv venv --python 3.12
+uv pip install -e ".[dev]"          # ~2-3 min (pandas, scikit-learn, lightgbm, shap, statsmodels, ruptures, fastapi ...)
+
+cd web
+npm install
+npm run build
+cd ..
 ```
+
+`uv` downloads its own Python 3.12 — you do **not** need Python pre-installed (avoid the
+Microsoft Store Python shim if you have it).
+
+### 4. Generate data → analyse → report
+
+```powershell
+uv run na generate --preset mixed_realistic --sites 200 --days 10   # ~2 min
+uv run na analytics                                                  # ~4 min
+uv run na report
+uv run na counts                                                     # sanity check: warehouse row counts
+```
+
+Fast smoke test: `uv run na generate --preset healthy_week --sites 60 --days 2 ; uv run na analytics`
+
+### 5. Serve the dashboard
+
+```powershell
+uv run na serve --port 8000
+```
+
+Then in the VM (over RDP) open **`http://localhost:8000`** in Edge. The one server serves
+both the API and the built dashboard.
+
+### 6. (Only to reach it from another machine) — bind wide + open the firewall
+
+Skip this if you use the VM's own browser over RDP.
+
+```powershell
+uv run na serve --host 0.0.0.0 --port 8000
+New-NetFirewallRule -DisplayName "RAN-Transport 8000" -Direction Inbound `
+  -Protocol TCP -LocalPort 8000 -Action Allow
+```
+
+Then browse to `http://<VM-IP-or-hostname>:8000` from your laptop.
+
+### 7. Run it as a background service (survives logout / reboot)
+
+Simplest is a **Scheduled Task** that starts at boot:
+
+```powershell
+$action  = New-ScheduledTaskAction -Execute "$HOME\ran-transport-isolation\.venv\Scripts\python.exe" `
+           -Argument "-m uvicorn networkanalysis.api.main:app --host 0.0.0.0 --port 8000" `
+           -WorkingDirectory "$HOME\ran-transport-isolation"
+$trigger = New-ScheduledTaskTrigger -AtStartup
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType S4U -RunLevel Highest
+$settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName "RAN-Transport-Dashboard" -Action $action -Trigger $trigger `
+  -Principal $principal -Settings $settings
+Start-ScheduledTask -TaskName "RAN-Transport-Dashboard"
+```
+
+(Set `PYTHONUTF8=1` at Machine scope as in step 2 so the task inherits it.)
+To stop: `Stop-ScheduledTask -TaskName "RAN-Transport-Dashboard"`.
+For a more robust Windows service, use [NSSM](https://nssm.cc/) wrapping the same
+`python -m uvicorn ...` command.
+
+### 8. Notebooks (optional)
+
+```powershell
+uv run jupyter lab --ip 0.0.0.0 --port 8888 --no-browser
+```
+
+Open the printed URL (with token). Notebooks `00`-`07` read the same `data\warehouse.db`.
+
+### Updating
+
+```powershell
+cd $HOME\ran-transport-isolation
+git pull
+uv pip install -e ".[dev]"
+cd web ; npm install ; npm run build ; cd ..
+Restart-ScheduledTask -TaskName "RAN-Transport-Dashboard"   # if using the task
+```
+
+Your `data\warehouse.db` survives an update.
 
 ---
 
-## Option A — Docker (simplest)
+## Windows VM — Docker Desktop
 
-### A.1 Install Docker
+If the VM can run Docker Desktop (needs virtualization / WSL2 enabled):
 
-```bash
-sudo apt install -y ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt update && sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-sudo usermod -aG docker $USER && newgrp docker      # so you can run docker without sudo
-```
+```powershell
+winget install --id Docker.DockerDesktop -e
+# start Docker Desktop once, let it finish setup, then:
 
-### A.2 Build & start
-
-```bash
-docker compose up -d --build          # builds the React app + the Python image; ~3-5 min first time
+cd $HOME\ran-transport-isolation
+docker compose up -d --build          # builds web + python image; ~3-5 min first run
 docker compose ps
 ```
 
-This starts two containers:
-
 | Service | Port | What |
 |---|---|---|
-| `app` | 8000 | FastAPI + the built dashboard |
-| `jupyter` | 8888 | JupyterLab on the notebooks (token disabled) |
+| `app` | 8000 | FastAPI + dashboard |
+| `jupyter` | 8888 | JupyterLab (token disabled - firewall it) |
 
-Data and reports persist in named volumes (`na_data`, `na_reports`).
+Generate the first dataset:
 
-### A.3 Generate the first dataset
-
-The warehouse starts empty. Either use the dashboard's **Data Generation** page, or from the CLI:
-
-```bash
+```powershell
 docker compose exec app na generate --preset mixed_realistic --sites 200 --days 10
 docker compose exec app na analytics
 docker compose exec app na report
 ```
 
-(Use `--preset healthy_week --sites 60 --days 2` for a ~30 s smoke run.)
-
-### A.4 Open it
-
-- Dashboard / API: `http://<VM-IP>:8000`
-- JupyterLab: `http://<VM-IP>:8888`
-
-If the VM has no public IP, tunnel from your laptop:
-
-```bash
-ssh -L 8000:localhost:8000 -L 8888:localhost:8888 user@<VM-IP>
-# then open http://localhost:8000
-```
-
-Otherwise open the ports in the VM's firewall / cloud security group (8000, and 8888 if you
-want notebooks).
-
-### A.5 Manage
-
-```bash
-docker compose logs -f app        # follow logs
-docker compose restart app        # after pulling new code: docker compose up -d --build
-docker compose down               # stop (volumes kept)
-docker compose down -v            # stop + wipe data
-```
+Open `http://<VM-IP>:8000` (open port 8000 in the firewall as in the native step 6).
+Manage: `docker compose logs -f app` · `docker compose restart app` · `docker compose down`
+(add `-v` to also wipe the data volumes). Update: `git pull ; docker compose up -d --build`.
 
 ---
 
-## Option B — native (Python + Node)
+## Linux VM
 
-### B.1 System packages
-
-```bash
-sudo apt update
-sudo apt install -y git curl build-essential libgomp1
-# libgomp1 = OpenMP runtime, needed by lightgbm
-```
-
-### B.2 Python via uv
+### Docker (simplest)
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env          # or: export PATH="$HOME/.local/bin:$PATH"
-uv --version
-```
+# install Docker
+sudo apt update && sudo apt install -y ca-certificates curl git
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update && sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo usermod -aG docker $USER && newgrp docker
 
-### B.3 Node 20 (for building the dashboard)
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-node --version    # v20.x
-```
-
-### B.4 Install the project
-
-```bash
+git clone https://github.com/manjunathsept11/ran-transport-isolation.git
 cd ran-transport-isolation
-uv venv --python 3.12
-uv pip install -e ".[dev]"           # ~2-3 min (pandas, scikit-learn, lightgbm, shap, statsmodels, ruptures, fastapi …)
+docker compose up -d --build
+docker compose exec app na generate --preset mixed_realistic --sites 200 --days 10
+docker compose exec app na analytics && docker compose exec app na report
+```
 
+Open `http://<VM-IP>:8000` (open the port in the cloud security group, or SSH-tunnel:
+`ssh -L 8000:localhost:8000 -L 8888:localhost:8888 user@<VM-IP>`).
+
+### Native
+
+```bash
+sudo apt update && sudo apt install -y git curl build-essential libgomp1
+curl -LsSf https://astral.sh/uv/install.sh | sh && source $HOME/.local/bin/env
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt install -y nodejs
+
+git clone https://github.com/manjunathsept11/ran-transport-isolation.git
+cd ran-transport-isolation
+uv venv --python 3.12 && uv pip install -e ".[dev]"
 cd web && npm install && npm run build && cd ..
-```
 
-### B.5 Generate → analyse → report
-
-```bash
-uv run na generate --preset mixed_realistic --sites 200 --days 10   # ~2 min
-uv run na analytics                                                  # ~4 min
-uv run na report
-uv run na counts                                                     # sanity: warehouse row counts
-```
-
-Fast smoke test: `uv run na generate --preset healthy_week --sites 60 --days 2 && uv run na analytics`.
-
-### B.6 Serve
-
-```bash
+uv run na generate --preset mixed_realistic --sites 200 --days 10
+uv run na analytics && uv run na report
 uv run na serve --host 0.0.0.0 --port 8000
 ```
 
-`--host 0.0.0.0` is required so the VM accepts connections from outside. Open
-`http://<VM-IP>:8000` (or SSH-tunnel as in A.4). The same server serves the API **and** the
-built dashboard from `web/dist`.
-
-### B.7 Notebooks (optional)
-
-```bash
-uv run jupyter lab --ip 0.0.0.0 --port 8888 --no-browser
-```
-
-Open the printed URL (with token). Notebook `00`–`07` under `notebooks/` read the same
-`data/warehouse.db`.
-
-### B.8 Keep it running (systemd)
+systemd unit:
 
 ```bash
 sudo tee /etc/systemd/system/ran-transport.service > /dev/null <<EOF
 [Unit]
 Description=RAN & Transport Isolation dashboard
 After=network.target
-
 [Service]
 User=$USER
 WorkingDirectory=$HOME/ran-transport-isolation
 ExecStart=$HOME/ran-transport-isolation/.venv/bin/python -m uvicorn networkanalysis.api.main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 Environment=PYTHONUTF8=1
-
 [Install]
 WantedBy=multi-user.target
 EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now ran-transport
-sudo systemctl status ran-transport
+sudo systemctl daemon-reload && sudo systemctl enable --now ran-transport
 ```
-
----
-
-## Updating to a new version
-
-```bash
-cd ran-transport-isolation
-git pull
-
-# Docker:
-docker compose up -d --build
-
-# native:
-uv pip install -e ".[dev]"
-cd web && npm install && npm run build && cd ..
-sudo systemctl restart ran-transport     # if using the service
-```
-
-Your `data/warehouse.db` survives an update (only the schema/data tables are rebuilt on the
-next `na generate`; the `job` history is preserved).
 
 ---
 
@@ -210,20 +246,20 @@ next `na generate`; the `job` history is preserved).
 
 | Setting | Effect | Small VM (2 GB) | Full demo |
 |---|---|---|---|
-| `--sites` | linear on generation, ~linear on analytics | 60–150 | 300–400 |
-| `--days` | linear on generation | 2–7 | 14 |
-| `--load-bin-facts` | also loads the 5-min facts into SQLite (large) | off | off unless you need SQL drill-down |
+| `--sites` | ~linear on generation and analytics | 60-150 | 300-400 |
+| `--days` | ~linear on generation | 2-7 | 14 |
+| `--load-bin-facts` | also loads 5-min facts into SQLite (large) | off | off unless you need SQL drill-down |
 
-The 5-min raw feeds always land as parquet under `data/raw/` regardless; the dashboard and
-analytics read the hourly rollups.
+The 5-min raw feeds always land as parquet under `data/raw/`; the dashboard and analytics
+read the hourly rollups.
 
 ---
 
 ## Verify the install
 
-```bash
-uv run pytest -q            # 11 tests, ~2 min (regenerates a tiny dataset)
-uv run na verify           # generator determinism + ground-truth-recovery targets, ~4 min
+```
+uv run pytest -q       # 11 tests, ~2 min (regenerates a tiny dataset)
+uv run na verify       # generator determinism + ground-truth-recovery targets, ~4 min
 ```
 
 ---
@@ -232,20 +268,22 @@ uv run na verify           # generator determinism + ground-truth-recovery targe
 
 | Symptom | Fix |
 |---|---|
-| `OSError: libgomp.so.1: cannot open shared object file` | `sudo apt install -y libgomp1` (native) — already in the Docker image |
+| `UnicodeEncodeError: 'charmap' codec ...` when running `na generate` (Windows) | set `PYTHONUTF8=1` (step 2). Per-session: `$env:PYTHONUTF8=1` |
+| `npm install` fails with `ENAMETOOLONG` / path errors (Windows) | enable long paths (step 2), then delete `web\node_modules` and retry |
+| `OSError: libgomp.so.1: cannot open shared object file` (Linux native) | `sudo apt install -y libgomp1` — already in the Docker image |
+| lightgbm import error about a missing DLL (Windows) | install the "Microsoft Visual C++ Redistributable (x64)" from Microsoft, then reopen PowerShell |
 | Dashboard loads but every page says "no data" | run `na generate` then `na analytics` (or use the Data Generation page) |
-| Progress bar stuck / 404 on `/api/jobs/...` | you're on an old build — `git pull` and rebuild; the fix keeps the `job` table across a regenerate |
-| `na serve` works locally but not from your laptop | use `--host 0.0.0.0` and open the port (firewall / security group), or SSH-tunnel |
-| Generation killed / OOM | fewer `--sites` / `--days`, or give the VM more RAM |
-| `npm run build` fails on an old Node | need Node ≥ 18; install Node 20 as in B.3 |
-| matplotlib complains about a display | it doesn't — the report forces the headless `Agg` backend |
-| Port 8000 in use | `na serve --port 8080` (and adjust the tunnel / firewall) |
+| Progress bar stuck / `/api/jobs/...` 404s | old build - `git pull` + rebuild; the fix keeps the `job` table across a regenerate |
+| Works locally, not from another machine | use `--host 0.0.0.0` **and** open port 8000 in the firewall / security group |
+| Generation killed / OOM | fewer `--sites` / `--days`, or add RAM |
+| `npm run build` fails on old Node | need Node >= 18; install Node 20 |
+| Port 8000 in use | `na serve --port 8080` (adjust firewall) |
 
 ---
 
-## What's in the box
+## What's in the repo
 
 `README.md` · `DASHBOARD_GUIDE.md` (how to read every screen) · `METHODS.md` (the
-statistical/ML techniques) · `DATA_GENERATION.md` (the generation pipeline + full column
+statistical/ML techniques) · `DATA_GENERATION.md` (generation pipeline + full column
 schema). CLI: `na generate` · `na analytics` · `na report` · `na serve` · `na verify` ·
 `na counts` · `na presets`.
