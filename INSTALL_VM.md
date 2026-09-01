@@ -20,19 +20,45 @@ Tested on Windows 11 / Windows Server 2022. Run the commands in **PowerShell**.
 > VM's own browser (Edge). You can skip the `--host 0.0.0.0` and firewall steps (6) — those
 > are only for reaching the dashboard from a *different* machine.
 
-### 1. Install prerequisites
+### 1. Install prerequisites — Git, Node LTS, uv
+
+**If you have `winget`** (Windows 11, Windows 10 21H2+, Server 2025):
 
 ```powershell
-# Git, Node 20 LTS, and uv (Python manager). winget ships with Windows 10 21H2+ / Server 2022.
 winget install --id Git.Git -e --source winget
 winget install --id OpenJS.NodeJS.LTS -e --source winget
 winget install --id astral-sh.uv -e --source winget
 ```
 
-If `winget` is unavailable, install manually:
-- Git: <https://git-scm.com/download/win>
-- Node 20 LTS: <https://nodejs.org/en/download>
-- uv: `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`
+**No `winget`?** (common on Windows Server 2019/2022) — don't bother installing it; get the
+three tools directly. Run PowerShell **as Administrator**:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+[Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+
+# uv - official one-liner, no winget
+irm https://astral.sh/uv/install.ps1 | iex
+
+# Git for Windows - latest 64-bit, silent
+$git = (irm https://api.github.com/repos/git-for-windows/git/releases/latest).assets |
+       Where-Object name -like '*-64-bit.exe' | Select-Object -First 1 -Expand browser_download_url
+Invoke-WebRequest $git -OutFile "$env:TEMP\git.exe"
+Start-Process "$env:TEMP\git.exe" -ArgumentList '/VERYSILENT /NORESTART /NOCANCEL /SP-' -Wait
+
+# Node current LTS - MSI, silent
+$lts = (irm https://nodejs.org/dist/index.json | Where-Object lts | Select-Object -First 1).version
+Invoke-WebRequest "https://nodejs.org/dist/$lts/node-$lts-x64.msi" -OutFile "$env:TEMP\node.msi"
+Start-Process msiexec -ArgumentList "/i `"$env:TEMP\node.msi`" /qn" -Wait
+```
+
+Or just download and click through the installers:
+Git <https://git-scm.com/download/win> · Node LTS <https://nodejs.org/en/download> ·
+uv is the `irm` line above.
+
+*(To install `winget` itself later: `Add-AppxPackage -RegisterByFamilyName -MainPackage
+Microsoft.DesktopAppInstaller_8wekyb3d8bbwe` if App Installer is present but unregistered,
+otherwise get the `.msixbundle` from <https://github.com/microsoft/winget-cli/releases>.)*
 
 **Close and reopen PowerShell** so the new `PATH` takes effect, then check:
 
