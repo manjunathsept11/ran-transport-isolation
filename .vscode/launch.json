@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API: uvicorn (debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["networkanalysis.api.main:app", "--host", "127.0.0.1", "--port", "8000", "--reload"],
+      "env": { "PYTHONUTF8": "1" },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "CLI: analytics (debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "networkanalysis.cli",
+      "args": ["analytics"],
+      "env": { "PYTHONUTF8": "1" },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "CLI: generate (debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "networkanalysis.cli",
+      "args": ["generate", "--preset", "healthy_week", "--sites", "60", "--days", "2"],
+      "env": { "PYTHONUTF8": "1" },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "version": "2.0.0",
+  "options": {
+    "env": { "PYTHONUTF8": "1" }
+  },
+  "inputs": [
+    {
+      "id": "preset",
+      "type": "pickString",
+      "description": "Generation preset",
+      "options": ["mixed_realistic", "healthy_week", "monsoon", "congestion_buildup", "fiber_cut_cluster"],
+      "default": "mixed_realistic"
+    },
+    { "id": "sites", "type": "promptString", "description": "Number of sites", "default": "150" },
+    { "id": "days", "type": "promptString", "description": "Duration in days", "default": "7" }
+  ],
+  "tasks": [
+    {
+      "label": "setup: python deps",
+      "type": "shell",
+      "command": "uv venv --python 3.12; uv pip install -e \".[dev]\"",
+      "problemMatcher": []
+    },
+    {
+      "label": "setup: web build",
+      "type": "shell",
+      "command": "npm install; npm run build",
+      "options": { "cwd": "${workspaceFolder}/web" },
+      "problemMatcher": []
+    },
+    {
+      "label": "generate",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe -m networkanalysis.cli generate --preset ${input:preset} --sites ${input:sites} --days ${input:days}",
+      "problemMatcher": []
+    },
+    {
+      "label": "analytics",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe -m networkanalysis.cli analytics",
+      "problemMatcher": []
+    },
+    {
+      "label": "report",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe -m networkanalysis.cli report",
+      "problemMatcher": []
+    },
+    {
+      "label": "pipeline: generate + analytics + report",
+      "dependsOrder": "sequence",
+      "dependsOn": ["generate", "analytics", "report"],
+      "problemMatcher": []
+    },
+    {
+      "label": "serve (API + dashboard :8000)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe -m uvicorn networkanalysis.api.main:app --host 127.0.0.1 --port 8000",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "." },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Started server process",
+          "endsPattern": "Application startup complete"
+        }
+      }
+    },
+    {
+      "label": "web: dev server (:5173, proxies /api)",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/web" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "test",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe -m pytest -q",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "verify (determinism + ground-truth recovery)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe -m networkanalysis.cli verify",
+      "problemMatcher": []
+    }
+  ]
+}

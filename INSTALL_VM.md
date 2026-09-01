@@ -146,6 +146,29 @@ Restart-ScheduledTask -TaskName "RAN-Transport-Dashboard"   # if using the task
 
 Your `data\warehouse.db` survives an update.
 
+### Working in VS Code
+
+The repo ships a `.vscode/` folder — open the project folder in VS Code and you get:
+
+1. **Recommended extensions** prompt — accept it (Python, Pylance, Ruff, Jupyter, ESLint,
+   Prettier, Tailwind).
+2. **Interpreter** — pick `.venv\Scripts\python.exe` if not auto-selected
+   (`Ctrl+Shift+P` → *Python: Select Interpreter*). The integrated terminal already exports
+   `PYTHONUTF8=1`, so `na` commands work there without the machine-wide setting.
+3. **Tasks** (`Ctrl+Shift+P` → *Tasks: Run Task*):
+   - `setup: python deps` / `setup: web build`
+   - `generate` (prompts for preset / sites / days) · `analytics` · `report`
+   - `pipeline: generate + analytics + report` (runs all three in order)
+   - `serve (API + dashboard :8000)` — then open `http://localhost:8000`
+   - `web: dev server (:5173)` — hot-reloading dashboard that proxies `/api` to :8000
+     (run `serve` too); use this only if you're editing the frontend
+   - `test` · `verify`
+4. **Debug** (`F5`): *API: uvicorn (debug)*, *CLI: analytics (debug)*, *CLI: generate (debug)*.
+5. **Notebooks** — open any file in `notebooks\`, select the `.venv` kernel, Run All.
+
+Typical first run in VS Code: *Run Task* → `setup: python deps` → `setup: web build` →
+`pipeline: generate + analytics + report` → `serve` → open the browser.
+
 ---
 
 ## Windows VM — Docker Desktop

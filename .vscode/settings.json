@@ -1,0 +1,31 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+
+  // PYTHONUTF8 for the integrated terminal (the CLI progress bar needs it on Windows)
+  "terminal.integrated.env.windows": { "PYTHONUTF8": "1" },
+  "terminal.integrated.env.linux": { "PYTHONUTF8": "1" },
+
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": { "source.organizeImports": "explicit" }
+  },
+  "ruff.lint.enable": true,
+
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.egg-info": true,
+    "**/.ruff_cache": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true
+  },
+  "search.exclude": {
+    "**/.venv": true,
+    "web/node_modules": true,
+    "web/dist": true,
+    "data": true,
+    "reports": true
+  }
+}
