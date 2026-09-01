@@ -1,0 +1,8 @@
+# Normalise line endings: repo stores LF, checkout is LF everywhere (incl. the Linux VM).
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.parquet binary
+*.xlsx binary
+*.db binary

@@ -1,0 +1,44 @@
+name: monsoon
+description: >
+  Sustained wet-weather spell degrading microwave backhaul across whole regions.
+  Many transport-attributed sites, clustered on microwave hops; radio stays healthy.
+seed: 23
+topology_seed: 20240901
+start_date: 2026-08-17
+duration_days: 14
+bin_seconds: 300
+
+market:
+  n_sites: 400
+  n_regions: 6
+  microwave_fraction: 0.42
+
+incidents:
+  - class: transport
+    kind: microwave_fade
+    targets: auto
+    n_targets: 22
+    start_offset_hours: 30
+    duration_hours: 54
+    magnitude: 0.7
+    region: R2
+  - class: transport
+    kind: microwave_fade
+    targets: auto
+    n_targets: 16
+    start_offset_hours: 150
+    duration_hours: 40
+    magnitude: 0.6
+    region: R5
+  - class: shared
+    kind: severe_weather
+    targets: auto
+    n_targets: 8
+    start_offset_hours: 34
+    duration_hours: 20
+    magnitude: 0.55
+
+auto_incidents:
+  transport_per_week: 2.5
+  ran_per_week: 0.8
+  shared_per_week: 0.6

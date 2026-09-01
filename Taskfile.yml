@@ -1,0 +1,64 @@
+# https://taskfile.dev  -  `task --list`
+version: "3"
+
+env:
+  PYTHONUTF8: "1"
+
+vars:
+  PY: "{{.ROOT_DIR}}/.venv/Scripts/python.exe"
+
+tasks:
+  setup:
+    desc: create venv + install python & web deps
+    cmds:
+      - uv venv --python 3.12
+      - uv pip install -e ".[dev]"
+      - cd web && npm install
+
+  gen:
+    desc: "generate a dataset (task gen -- --preset mixed_realistic --sites 400)"
+    cmds:
+      - "{{.PY}} -m networkanalysis.cli generate {{.CLI_ARGS}}"
+
+  analytics:
+    cmds: ["{{.PY}} -m networkanalysis.cli analytics"]
+
+  report:
+    cmds: ["{{.PY}} -m networkanalysis.cli report"]
+
+  demo:
+    desc: full pipeline with the default preset
+    cmds:
+      - "{{.PY}} -m networkanalysis.cli generate --preset mixed_realistic --sites 400 --days 14"
+      - "{{.PY}} -m networkanalysis.cli analytics"
+      - "{{.PY}} -m networkanalysis.cli report"
+
+  web-build:
+    dir: web
+    cmds: ["npm run build"]
+
+  serve:
+    desc: run API + built dashboard on :8000
+    deps: [web-build]
+    cmds: ["{{.PY}} -m networkanalysis.cli serve"]
+
+  dev-api:
+    cmds: ["{{.PY}} -m uvicorn networkanalysis.api.main:app --reload --port 8000"]
+
+  dev-web:
+    dir: web
+    cmds: ["npm run dev"]
+
+  notebooks:
+    cmds: ["{{.PY}} notebooks/_build_notebooks.py"]
+
+  test:
+    cmds: ["{{.PY}} -m pytest -q"]
+
+  verify:
+    cmds: ["{{.PY}} -m networkanalysis.cli verify"]
+
+  lint:
+    cmds:
+      - "{{.PY}} -m ruff check src tests"
+      - "{{.PY}} -m ruff format --check src tests"

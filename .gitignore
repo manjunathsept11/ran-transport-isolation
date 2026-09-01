@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Node
+node_modules/
+web/dist/
+.vite/
+*.tsbuildinfo
+
+# Data & artifacts (regenerated)
+data/
+reports/
+!data/.gitkeep
+!reports/.gitkeep
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,109 @@
+name: mixed_realistic
+description: >
+  Default demo dataset. A realistic blend of transport, RAN and shared incidents at
+  operationally plausible rates across a 14-day, ~1200-site market. This is what the
+  dashboard, notebooks and report are tuned against.
+seed: 42
+topology_seed: 20240901
+start_date: 2026-08-17
+duration_days: 14
+bin_seconds: 300
+
+market:
+  n_sites: 400
+  n_regions: 6
+  morphology_mix:
+    dense_urban: 0.12
+    urban: 0.33
+    suburban: 0.35
+    rural: 0.20
+  microwave_fraction: 0.28
+
+incidents:
+  # transport
+  - class: transport
+    kind: microwave_fade
+    targets: auto
+    n_targets: 10
+    start_offset_hours: 40
+    duration_hours: 30
+    magnitude: 0.62
+  - class: transport
+    kind: congested_backhaul
+    targets: auto
+    n_targets: 8
+    start_offset_hours: 96
+    duration_hours: 160
+    magnitude: 0.55
+    morphology: urban
+  - class: transport
+    kind: fiber_degradation
+    targets: auto
+    n_targets: 11
+    start_offset_hours: 205
+    duration_hours: 8
+    magnitude: 0.8
+  - class: transport
+    kind: sfp_errors
+    targets: auto
+    n_targets: 4
+    start_offset_hours: 150
+    duration_hours: 44
+    magnitude: 0.5
+  - class: transport
+    kind: queue_drops
+    targets: auto
+    n_targets: 6
+    start_offset_hours: 260
+    duration_hours: 18
+    magnitude: 0.6
+  # ran
+  - class: ran
+    kind: sleeping_sector
+    n_targets: 2
+    start_offset_hours: 58
+    duration_hours: 10
+    magnitude: 0.85
+  - class: ran
+    kind: external_interference
+    targets: auto
+    n_targets: 5
+    start_offset_hours: 130
+    duration_hours: 70
+    magnitude: 0.8
+  - class: ran
+    kind: prb_exhaustion
+    targets: auto
+    n_targets: 7
+    start_offset_hours: 180
+    duration_hours: 150
+    magnitude: 0.75
+    morphology: dense_urban
+  - class: ran
+    kind: coverage_hole
+    targets: auto
+    n_targets: 2
+    start_offset_hours: 90
+    duration_hours: 200
+    magnitude: 0.6
+    morphology: rural
+  # shared / ambiguous
+  - class: shared
+    kind: site_power_outage
+    targets: auto
+    n_targets: 3
+    start_offset_hours: 220
+    duration_hours: 5
+    magnitude: 0.9
+  - class: shared
+    kind: transport_node_reload
+    targets: auto
+    n_targets: 7
+    start_offset_hours: 300
+    duration_hours: 2
+    magnitude: 0.75
+
+auto_incidents:
+  transport_per_week: 1.6
+  ran_per_week: 1.8
+  shared_per_week: 0.5

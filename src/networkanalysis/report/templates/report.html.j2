@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RAN &amp; Transport Isolation - Analytics Report</title>
+<style>
+  :root { --ink:#1c2430; --muted:#5c6b7a; --line:#dfe4ea; --transport:#e8663c; --ran:#3b7dd8; --shared:#8a5cd1; }
+  * { box-sizing:border-box; }
+  body { font:14px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink); margin:0; background:#f6f7f9; }
+  .wrap { max-width:960px; margin:0 auto; padding:40px 32px 80px; background:#fff; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  h2 { font-size:18px; margin:34px 0 12px; padding-bottom:6px; border-bottom:2px solid var(--line); }
+  h3 { font-size:15px; margin:20px 0 8px; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  .kpis { display:flex; gap:14px; flex-wrap:wrap; margin:18px 0; }
+  .kpi { flex:1 1 150px; border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .kpi .n { font-size:22px; font-weight:700; }
+  .kpi .l { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; margin:10px 0; }
+  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { background:#f0f2f5; position:sticky; top:0; }
+  .tag { display:inline-block; padding:1px 7px; border-radius:20px; color:#fff; font-size:11px; font-weight:600; }
+  .transport{background:var(--transport);} .ran{background:var(--ran);} .shared{background:var(--shared);} .none{background:#8d99a6;}
+  img { max-width:100%; border:1px solid var(--line); border-radius:8px; }
+  .row { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
+  .row > * { flex:1 1 320px; }
+  .muted { color:var(--muted); }
+  code { background:#f0f2f5; padding:1px 4px; border-radius:4px; }
+  .scroll { overflow-x:auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>RAN &amp; Transport Isolation - Analytics Report</h1>
+  <p class="sub">
+    Generated {{ generated_at }} &middot; preset <code>{{ preset }}</code> &middot;
+    {{ n_sites }} sites &middot; {{ duration_days }} days from {{ start_date }}
+  </p>
+
+  <h2>Executive summary</h2>
+  <div class="kpis">
+    <div class="kpi"><div class="n">{{ n_priority }}</div><div class="l">Priority sites for Phase-2 audit</div></div>
+    <div class="kpi"><div class="n">{{ mix.get('transport', 0) }}</div><div class="l">Transport-attributed</div></div>
+    <div class="kpi"><div class="n">{{ mix.get('ran', 0) }}</div><div class="l">RAN-attributed</div></div>
+    <div class="kpi"><div class="n">{{ mix.get('shared', 0) }}</div><div class="l">Shared / ambiguous</div></div>
+  </div>
+  <p>
+    The impact-ranking engine flagged <strong>{{ n_priority }}</strong> sites whose end-user
+    experience (TCP RTT, TCP fail %, Ookla throughput, VoNR MOS, YouTube QoE) is materially
+    degraded versus their own and peer-group baselines. Of these,
+    <strong>{{ mix.get('transport', 0) }}</strong> carry a transport-network signature
+    (TWAMP loss/jitter, SevOne queue/CRC, elevated TCP client-RTT with a flat server-RTT,
+    correlated sibling-site degradation on a shared uplink) and should be routed to the IP
+    transport team; <strong>{{ mix.get('ran', 0) }}</strong> are radio-attributed.
+  </p>
+
+  <div class="row">
+    <img src="{{ charts.attribution_mix }}" alt="attribution mix">
+    <img src="{{ charts.market_trend }}" alt="market trend">
+  </div>
+
+  <h2>Attribution model accuracy (vs injected ground truth)</h2>
+  {% if attr_eval and attr_eval.get('labels') %}
+  <table>
+    <tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1</th><th>Support</th></tr>
+    {% for c in attr_eval.labels %}
+    <tr>
+      <td><span class="tag {{ c }}">{{ c }}</span></td>
+      <td>{{ attr_eval[c].precision | r2 }}</td>
+      <td>{{ attr_eval[c].recall | r2 }}</td>
+      <td>{{ attr_eval[c].f1 | r2 }}</td>
+      <td>{{ attr_eval[c].support }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted">Overall accuracy {{ attr_eval.accuracy | r2 }}, macro-F1 {{ attr_eval.macro_f1 | r2 }}
+     across {{ n_ground_truth }} injected incidents. The rule engine and the LightGBM classifier
+     are combined in a calibrated ensemble; SHAP feature attributions are shown per site in the dashboard.</p>
+  {% else %}
+  <p class="muted">Not enough labelled incidents in this run to score the classifier.</p>
+  {% endif %}
+
+  <h2>Top priority sites</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>#</th><th>Site</th><th>Region</th><th>Morph</th><th>Impact</th><th>Cause</th>
+        <th>Conf.</th><th>Sess. impacted</th><th>Worst window</th><th>Recommended action</th></tr>
+    {% for r in audit_rows %}
+    <tr>
+      <td>{{ r.rank }}</td><td><strong>{{ r.site_id }}</strong></td><td>{{ r.region }}</td>
+      <td>{{ r.morphology }}</td><td>{{ '%.2f' % r.impact_score }}</td>
+      <td><span class="tag {{ r.attributed_cause or 'none' }}">{{ r.attributed_cause or 'none' }}</span></td>
+      <td>{{ r.confidence | r2 }}</td>
+      <td>{{ '%.0f' % (r.sessions_impacted or 0) }}</td>
+      <td class="muted">{{ r.worst_window_start }}</td>
+      <td>{{ r.recommended_action or '' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  <p class="muted">Full ranked list and per-site evidence in <code>{{ xlsx_name }}</code>.</p>
+
+  <h2>Detected incidents &amp; root cause</h2>
+  {% if rca_incident %}
+  <table>
+    <tr><th>Scope</th><th>Candidate cause</th><th>Entity</th><th>Conf.</th><th>Evidence</th><th>Matched GT</th></tr>
+    {% for r in rca_incident %}
+    <tr><td>{{ r.scope_id }}</td><td>{{ r.candidate_cause }}</td><td><code>{{ r.candidate_entity }}</code></td>
+        <td>{{ r.confidence | r2 }}</td>
+        <td class="muted">{{ (r.evidence | fromjson | join('; ')) if r.evidence else '' }}</td>
+        <td>{{ r.matched_incident_id or '-' }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">No multi-site transport incidents localised in this run.</p>{% endif %}
+
+  <h3>Anomaly detection</h3>
+  <p class="muted">
+    {{ anomaly.get('univariate_events', 0) }} univariate + {{ anomaly.get('multivariate_events', 0) }}
+    multivariate anomaly events; clustered into {{ anomaly.get('detected_incidents', 0) }} candidate
+    incidents, {{ anomaly.get('matched_incidents', 0) }} matched to ground truth
+    (of {{ anomaly.get('ground_truth_incidents', 0) }}).
+  </p>
+
+  <h2>Variability analysis</h2>
+  <p class="muted">
+    Variance of TCP client-RTT decomposes as:
+    {% for k, v in variance_components.items() %}<code>{{ k }} {{ v | pct }}</code> {% endfor %}.
+    {{ instability_flagged }} sites flagged as high-variability-low-mean (intermittent-fault fingerprint).
+  </p>
+  {% if unstable_sites %}
+  <table>
+    <tr><th>Site</th><th>Metric</th><th>CV</th><th>Busy/off-peak</th><th>Day-to-day var</th><th>WoW drift</th></tr>
+    {% for r in unstable_sites %}
+    <tr><td>{{ r.site_id }}</td><td>{{ r.metric }}</td><td>{{ r.cv | r2 }}</td>
+        <td>{{ r.busy_offpeak_ratio | r2 }}</td><td>{{ r.day_to_day_var | r2 }}</td>
+        <td>{{ 'yes' if r.wow_shift else 'no' }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <h2>Methodology &amp; caveats</h2>
+  <ul class="muted">
+    <li>Data is <strong>synthetic</strong>, generated by a layered causal model (demand &rarr; radio
+      &rarr; transport queueing &rarr; session/app KPIs) with labelled fault injection.</li>
+    <li>Attribution combines an explainable rule engine with a LightGBM classifier trained on the
+      injected labels; confidence is isotonic-calibrated.</li>
+    <li>"Sessions / users impacted" are modelled counts, not real subscriber identities.</li>
+    <li>Transport root-cause localisation is a minimal hitting-set over the shared-link &rarr;
+      affected-site mapping on the transport graph.</li>
+  </ul>
+</div>
+</body>
+</html>

@@ -1,0 +1,27 @@
+name: healthy_week
+description: >
+  Baseline market with only light background noise and one or two minor issues.
+  Used as the control - the attribution model should flag very few sites.
+seed: 11
+topology_seed: 20240901
+start_date: 2026-08-17
+duration_days: 7
+bin_seconds: 300
+
+market:
+  n_sites: 300
+  n_regions: 5
+  microwave_fraction: 0.25
+
+incidents:
+  - class: ran
+    kind: sleeping_sector
+    n_targets: 1
+    start_offset_hours: 62
+    duration_hours: 4
+    magnitude: 0.5
+
+auto_incidents:
+  transport_per_week: 0.5
+  ran_per_week: 0.7
+  shared_per_week: 0.2

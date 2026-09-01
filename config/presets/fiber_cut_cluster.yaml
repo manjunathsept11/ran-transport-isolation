@@ -1,0 +1,36 @@
+name: fiber_cut_cluster
+description: >
+  A single aggregation-link fibre degradation event hitting a whole cluster of sites at
+  once. Sharp onset, strong sibling-site correlation - the RCA fault localiser should
+  collapse the affected set onto one link.
+seed: 51
+topology_seed: 20240901
+start_date: 2026-08-17
+duration_days: 7
+bin_seconds: 300
+
+market:
+  n_sites: 350
+  n_regions: 6
+  microwave_fraction: 0.22
+
+incidents:
+  - class: transport
+    kind: fiber_degradation
+    targets: auto
+    n_targets: 12
+    start_offset_hours: 74
+    duration_hours: 9
+    magnitude: 0.85
+  - class: transport
+    kind: sfp_errors
+    targets: auto
+    n_targets: 5
+    start_offset_hours: 120
+    duration_hours: 30
+    magnitude: 0.6
+
+auto_incidents:
+  transport_per_week: 0.8
+  ran_per_week: 1.0
+  shared_per_week: 0.3
